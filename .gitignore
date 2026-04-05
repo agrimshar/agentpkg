@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.agentpkg.zip
+.env
+.DS_Store
+*.log
+coverage/
+.nyc_output/

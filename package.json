@@ -1,0 +1,66 @@
+{
+  "name": "agentpkg",
+  "version": "1.0.0",
+  "description": "Universal AI agent packaging format — bundle souls, memories, skills, tools, crons, subagents, and encrypted secrets into a single portable archive, then compile to any platform.",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "bin": {
+    "agentpkg": "dist/bin/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    },
+    "./compile": {
+      "types": "./dist/src/compile.d.ts",
+      "default": "./dist/src/compile.js"
+    },
+    "./secrets": {
+      "types": "./dist/src/secrets.d.ts",
+      "default": "./dist/src/secrets.js"
+    },
+    "./audit": {
+      "types": "./dist/src/audit.d.ts",
+      "default": "./dist/src/audit.js"
+    },
+    "./deps": {
+      "types": "./dist/src/deps.d.ts",
+      "default": "./dist/src/deps.js"
+    },
+    "./adapters/openclaw": {
+      "types": "./dist/src/adapters/openclaw.d.ts",
+      "default": "./dist/src/adapters/openclaw.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "npm run build && node test/test.js",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "keywords": [
+    "ai", "agent", "llm", "packaging", "migration", "portable",
+    "claude", "cursor", "copilot", "windsurf", "crewai", "openai",
+    "mcp", "agent-framework", "agent-migration", "orchestration",
+    "skills", "memories", "tools", "secrets", "typescript"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "homepage": "",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "*"
+  }
+}
