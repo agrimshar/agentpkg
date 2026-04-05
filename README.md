@@ -16,10 +16,10 @@ agentpkg solves this. You define your agent once (its personality, memories, ski
 ## Install
 
 ```bash
-npm install -g agentpkg
+npm install -g universal-agent
 ```
 
-Needs Node.js 18+. Zero runtime dependencies.
+Needs Node.js 18+. Zero runtime dependencies. The CLI command is still `agentpkg`.
 
 ## Tutorial: Your First Agent in 5 Minutes
 
@@ -87,8 +87,8 @@ That's it. Your `./output` folder now has the real native files each platform ex
 If you want to build agents programmatically instead of editing files by hand:
 
 ```typescript
-import { AgentPackage } from "agentpkg";
-import { compile } from "agentpkg/compile";
+import { AgentPackage } from "universal-agent";
+import { compile } from "universal-agent/compile";
 
 // Create your agent
 const agent = new AgentPackage({
@@ -242,7 +242,7 @@ The adapter is fuzzy. It recognizes common key names like `systemPrompt`, `perso
 ### From OpenClaw
 
 ```typescript
-import { convertOpenClaw } from "agentpkg/adapters/openclaw";
+import { convertOpenClaw } from "universal-agent/adapters/openclaw";
 
 const pkg = convertOpenClaw("~/.config/openclaw", {
   includeSecrets: true,
@@ -320,10 +320,10 @@ src/
 bin/
 └── cli.ts                297 lines    CLI (8 commands)
 test/
-└── test.js               412 lines    30 tests
+└── test.js               412 lines    33 tests
 ```
 
-~4,000 lines of TypeScript. Zero runtime dependencies. 30 tests covering core operations, edge cases, and security validations.
+~4,000 lines of TypeScript. Zero runtime dependencies. 33 tests covering core operations, edge cases, and security validations.
 
 ## Contributing
 
@@ -331,7 +331,7 @@ test/
 git clone https://github.com/agrimshar/agentpkg.git
 cd agentpkg
 npm install
-npm test        # 30 tests
+npm test        # 33 tests
 npm run build   # TypeScript -> dist/
 ```
 
