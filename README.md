@@ -1,15 +1,17 @@
 # agentpkg
 
-Universal packaging format for AI agents. Bundle an agent's soul, memories, skills, tools, crons, subagents, workflows, integrations, and encrypted secrets into a single portable `.agentpkg.zip` — then compile it to any platform's native directory structure.
+One format for all your AI agents. Write your agent once, then compile it to Claude Code, Cursor, Copilot, Windsurf, CrewAI, OpenAI, or APM.
 
 ```
-agentpkg pack ./my-agent --passphrase "migrate-key"
-agentpkg compile agent.agentpkg.zip --target claude-code --passphrase "migrate-key"
+agentpkg pack ./my-agent
+agentpkg compile agent.agentpkg.zip --target claude-code
 ```
 
-## Why
+## The Problem
 
-AI agents are trapped in their platforms. Your OpenClaw agent can't move to Claude Code. Your Cursor rules don't work in Copilot. Your CrewAI agents can't become Windsurf rules. agentpkg fixes this by defining a single interchange format and compiling to every target's real file structure.
+AI agents are locked into whatever platform built them. Your Claude Code agent can't move to Cursor. Your Cursor rules don't work in Copilot. Your CrewAI agents can't become Windsurf rules.
+
+agentpkg solves this. You define your agent once (its personality, memories, skills, tools, secrets, everything) and agentpkg compiles it into the exact file structure each platform expects.
 
 ## Install
 
@@ -17,237 +19,320 @@ AI agents are trapped in their platforms. Your OpenClaw agent can't move to Clau
 npm install -g agentpkg
 ```
 
-Requires Node.js 18+. Zero runtime dependencies.
+Needs Node.js 18+. Zero runtime dependencies.
 
-## Quick start
+## Tutorial: Your First Agent in 5 Minutes
+
+### Step 1: Create a new agent
 
 ```bash
-# Create a new agent package
 agentpkg init my-agent
+```
 
-# Edit the files in my-agent.agentpkg/
-# Then pack it
+This creates a `my-agent.agentpkg/` folder with a starter template.
+
+### Step 2: Customize your agent
+
+Open `my-agent.agentpkg/soul/system-prompt.md` and write your agent's personality:
+
+```markdown
+You are a friendly code reviewer. You focus on readability and always
+explain your suggestions. You never nitpick formatting.
+```
+
+Open `my-agent.agentpkg/soul/identity.json` to set the model:
+
+```json
+{
+  "model": "claude-sonnet-4-20250514",
+  "temperature": 0.3
+}
+```
+
+### Step 3: Add some memories
+
+Create a file like `my-agent.agentpkg/memories/entries/pref-001.json`:
+
+```json
+{
+  "id": "pref-001",
+  "content": "User prefers TypeScript over JavaScript",
+  "type": "preference",
+  "importance": 0.9
+}
+```
+
+### Step 4: Pack it up
+
+```bash
 agentpkg pack my-agent.agentpkg
+```
 
-# Compile to Claude Code
+This creates `my-agent.agentpkg.zip`, a single portable file you can share, back up, or compile.
+
+### Step 5: Compile to any platform
+
+```bash
+# Just Claude Code
 agentpkg compile my-agent.agentpkg.zip --target claude-code -o ./output
 
-# Compile to ALL platforms at once
+# Or all platforms at once
 agentpkg compile my-agent.agentpkg.zip --target all -o ./output
 ```
 
-## What's in a package
+That's it. Your `./output` folder now has the real native files each platform expects.
 
-An `.agentpkg.zip` contains:
+## Tutorial: Using the Library in Code
 
-```
-my-agent.agentpkg/
-├── manifest.json              # Package metadata
-├── soul/
-│   ├── system-prompt.md       # The agent's system prompt
-│   ├── identity.json          # Model config (model, temperature, etc.)
-│   └── guardrails.json        # Rules, refusals, safety notes
-├── memories/
-│   ├── index.json
-│   └── entries/*.json         # Individual memory entries with type + importance
-├── skills/
-│   └── skill-name/
-│       ├── skill.json         # Metadata
-│       ├── SKILL.md           # Instructions
-│       └── handler.js         # Optional handler code
-├── tools/
-│   └── tool-name/
-│       ├── tool.json          # Schema + parameters
-│       └── handler.py         # Optional handler
-├── crons/
-│   └── schedules.json         # Cron jobs with schedules
-├── subagents/
-│   └── sub-agent.agentpkg/    # Recursively nested packages
-├── workflows/
-│   └── workflow-name.json     # Multi-step workflows
-├── integrations/
-│   └── connections.json       # MCP servers, APIs, webhooks
-├── knowledge/
-│   ├── documents/*.md         # Reference documents
-│   └── structured/*.json      # Structured data
-├── secrets/
-│   └── vault.json             # AES-256-GCM encrypted credentials
-└── meta/
-    ├── platform-raw/          # Original platform export (lossless)
-    └── export-log.json
-```
-
-## Compile targets
-
-Each target generates the platform's real native directory structure:
-
-| Target | Command | What it generates |
-|---|---|---|
-| **Claude Code** | `--target claude-code` | `CLAUDE.md` + `.claude/{settings.json, skills/*/SKILL.md, agents/*.md, commands/*.md, rules/*.md}` + `.mcp.json` |
-| **Cursor** | `--target cursor` | `.cursor/rules/*.mdc` (with `description`/`globs`/`alwaysApply` frontmatter) + `AGENTS.md` |
-| **GitHub Copilot** | `--target copilot` | `.github/{copilot-instructions.md, instructions/*.instructions.md, agents/*.md, skills/*/SKILL.md, prompts/*.prompt.md}` + `AGENTS.md` |
-| **Windsurf** | `--target windsurf` | `.windsurf/rules/*.md` + `.windsurfrules` + `AGENTS.md` |
-| **CrewAI** | `--target crewai` | Full Python project: `pyproject.toml` + `src/*/config/{agents.yaml, tasks.yaml}` + `crew.py` + `tools/*.py` + `.env` |
-| **OpenAI** | `--target openai` | `openai-responses-config.json` (Responses API) + `openai-assistant-config.json` (legacy) |
-| **Microsoft APM** | `--target apm` | `apm.yml` + `.apm/{agents/*.agent.md, instructions/*.instructions.md, skills/*/SKILL.md, prompts/*.prompt.md}` + `AGENTS.md` + `CLAUDE.md` |
-
-## Encrypted secrets
-
-Secrets are encrypted with AES-256-GCM and scrypt key derivation. Without the passphrase, the vault is cryptographic noise.
-
-```bash
-# Pack with secrets
-agentpkg pack ./my-agent --passphrase "my-secret-phrase"
-
-# Inspect shows key names without decrypting
-agentpkg inspect agent.agentpkg.zip
-#   Secrets          3 (encrypted)
-#   ℹ Secret keys in vault:
-#     - SLACK_BOT_TOKEN
-#     - OPENAI_API_KEY
-#     - DATABASE_URL
-
-# Compile and inject secrets into target platform
-agentpkg compile agent.zip --target claude-code --passphrase "my-secret-phrase"
-# → .env created with decrypted credentials
-# → .mcp.json updated with tokens
-```
-
-Each platform gets secrets in its native format:
-
-| Platform | Where secrets go |
-|---|---|
-| Claude Code | `.env` + `.mcp.json` env fields |
-| CrewAI | `.env` (environment variables) |
-| OpenAI | `.env` + config metadata |
-| Others | `.env` file |
-
-## Import from any source
-
-### Generic JSON
-
-```bash
-# Convert any agent export JSON to agentpkg
-agentpkg convert export.json --platform relevance-ai -o agent.agentpkg.zip
-```
-
-The fuzzy adapter matches common key patterns: `systemPrompt`/`persona`/`soul`/`character` → system prompt, `memories`/`context`/`knowledge_base` → memories, etc.
-
-### OpenClaw (dedicated adapter)
-
-```typescript
-import { convertOpenClaw } from "agentpkg/adapters/openclaw";
-
-const pkg = convertOpenClaw("~/.config/openclaw", {
-  includeSecrets: true,    // Collect actual credential values
-  extractSqliteMemories: true,  // Read all 8 SQLite databases
-});
-
-await pkg.pack("my-agent.agentpkg.zip", "migration-passphrase");
-```
-
-The OpenClaw adapter reads: `SOUL.md` + `IDENTITY.md` → soul, 8 SQLite databases → memories, `workspace/memory/*.md` → typed memories, `workspace/skills/` → skills with reference docs, `cron/jobs.json` → crons, `agents/{cap,hype,spore,myco,ticker,web,roots}/` → 7 subagents, `secrets/` → encrypted vault.
-
-## Programmatic API
+If you want to build agents programmatically instead of editing files by hand:
 
 ```typescript
 import { AgentPackage } from "agentpkg";
 import { compile } from "agentpkg/compile";
 
-const pkg = new AgentPackage({
+// Create your agent
+const agent = new AgentPackage({
   name: "Research Assistant",
-  description: "AI research agent",
+  description: "Helps find and summarize ML papers",
 });
 
-pkg.setSoul(
-  "You are an AI research assistant specializing in ML papers.",
+// Give it a personality
+agent.setSoul(
+  "You are an AI research assistant specializing in ML papers. Always cite sources.",
   { model: "claude-sonnet-4-20250514", temperature: 0.3 },
-  { rules: ["Always cite sources"], refusals: [], safetyNotes: [] }
+  { rules: ["Always cite sources", "Prefer recent papers"], refusals: [], safetyNotes: [] }
 );
 
-pkg.addMemory({ id: "m1", content: "User studies RLHF", type: "preference", importance: 0.9 });
-pkg.addSkill({ name: "arxiv-monitor", description: "Monitor arxiv", instructions: "# Arxiv\n..." });
-pkg.addTool({ name: "search", description: "Search KB", parameters: { type: "object" } });
-pkg.addCron({ name: "daily-digest", schedule: "0 8 * * *", action: "Run digest" });
-pkg.addIntegration({ name: "slack", type: "mcp", url: "https://slack.mcp.example.com/sse" });
-pkg.addSecret({ key: "SLACK_TOKEN", value: "xoxb-...", type: "token", integration: "slack" });
+// Teach it things
+agent.addMemory({ id: "m1", content: "User studies RLHF", type: "preference", importance: 0.9 });
 
-const sub = new AgentPackage({ name: "citation-bot" });
-sub.setSoul("Format citations in BibTeX, APA, MLA.");
-pkg.addSubagent(sub);
+// Give it skills
+agent.addSkill({ name: "arxiv-search", description: "Search arxiv for papers", instructions: "# How to search\n..." });
+
+// Give it tools
+agent.addTool({ name: "search", description: "Search knowledge base", parameters: { type: "object" } });
+
+// Schedule recurring work
+agent.addCron({ name: "daily-digest", schedule: "0 8 * * *", action: "Compile daily paper digest" });
+
+// Connect to services
+agent.addIntegration({ name: "slack", type: "mcp", url: "https://slack.mcp.example.com/sse" });
+
+// Add secrets (encrypted when packed)
+agent.addSecret({ key: "SLACK_TOKEN", value: "xoxb-...", type: "token", integration: "slack" });
+
+// Add a helper agent
+const helper = new AgentPackage({ name: "citation-bot" });
+helper.setSoul("Format citations in BibTeX, APA, or MLA.");
+agent.addSubagent(helper);
 
 // Pack with encrypted secrets
-await pkg.pack("research-assistant.agentpkg.zip", "my-passphrase");
+await agent.pack("research-assistant.agentpkg.zip", "my-passphrase");
 
-// Compile to any target
-compile(pkg, "claude-code", "./output");
-compile(pkg, "crewai", "./output");
-compile(pkg, "copilot", "./output");
+// Or compile directly
+compile(agent, "claude-code", "./output");
+compile(agent, "crewai", "./output");
+compile(agent, "copilot", "./output");
 ```
 
-## CLI reference
+## Tutorial: Working with Secrets
 
-```
-agentpkg init <name>               Scaffold a new agent package
-agentpkg pack <dir>                Pack into .agentpkg.zip
-agentpkg validate <path>           Validate package structure
-agentpkg inspect <path>            Show contents + secrets summary
-agentpkg unpack <zip>              Extract a package
-agentpkg convert <json>            Convert any JSON to agentpkg
-agentpkg audit <path>              Security scan
-agentpkg compile <path>            Compile to platform format
-```
+Secrets (API keys, tokens, passwords) are encrypted with AES-256-GCM before they touch disk. Without the passphrase, the vault is unreadable.
 
-### Flags
+### Packing with secrets
 
-```
---target <format>         Compile target (claude-code|cursor|copilot|windsurf|crewai|openai|apm|all)
---passphrase <phrase>     Encrypt/decrypt secrets vault (AES-256-GCM + scrypt)
---include-secrets         Include credential values when importing
---platform <name>         Source platform name for convert command
--o <path>                 Output path
+Put your secrets in the `secrets/` folder (one file per secret, filename = key, contents = value), then pack with a passphrase:
+
+```bash
+agentpkg pack ./my-agent --passphrase "strong-passphrase-here"
 ```
 
-## Security audit
+### Inspecting without decrypting
 
-The audit scanner checks for 26 threat patterns across three categories:
+You can see which secrets are in a package without the passphrase:
+
+```bash
+agentpkg inspect agent.agentpkg.zip
+# Shows: 3 secrets (encrypted)
+#   SLACK_BOT_TOKEN
+#   OPENAI_API_KEY
+#   DATABASE_URL
+```
+
+### Compiling with secrets
+
+When you compile, pass the passphrase and secrets get injected into the right place for each platform:
+
+```bash
+agentpkg compile agent.zip --target claude-code --passphrase "strong-passphrase-here"
+```
+
+| Platform | Where secrets end up |
+|---|---|
+| Claude Code | `.env` file and `.mcp.json` env fields |
+| CrewAI | `.env` (environment variables) |
+| OpenAI | `.env` and config metadata |
+| Others | `.env` file |
+
+### Passphrase tips
+
+agentpkg requires at least 8 characters but will warn you if your passphrase is weak. For real security, use 12+ characters with a mix of letters, numbers, and symbols.
+
+## What's Inside a Package
+
+```
+my-agent.agentpkg/
+├── manifest.json              # Package metadata
+├── soul/
+│   ├── system-prompt.md       # The agent's personality
+│   ├── identity.json          # Model config (model, temperature, etc.)
+│   └── guardrails.json        # Rules and boundaries
+├── memories/
+│   ├── index.json
+│   └── entries/*.json         # Things the agent remembers
+├── skills/
+│   └── skill-name/
+│       ├── skill.json         # Skill metadata
+│       ├── SKILL.md           # Skill instructions
+│       └── handler.js         # Optional code
+├── tools/
+│   └── tool-name/
+│       └── tool.json          # Tool schema and parameters
+├── crons/
+│   └── schedules.json         # Scheduled tasks
+├── subagents/
+│   └── helper.agentpkg/       # Nested agent packages
+├── workflows/
+│   └── deploy.json            # Multi-step workflows
+├── integrations/
+│   └── connections.json       # MCP servers, APIs, webhooks
+├── knowledge/
+│   ├── documents/*.md         # Reference docs
+│   └── structured/*.json      # Structured data
+├── secrets/
+│   └── vault.json             # Encrypted credentials
+└── meta/
+    └── platform-raw/          # Original platform export (for lossless round trips)
+```
+
+## Compile Targets
+
+Each target produces the platform's actual native file structure:
+
+| Target | Flag | What you get |
+|---|---|---|
+| **Claude Code** | `--target claude-code` | `CLAUDE.md`, `.claude/` with settings, skills, agents, rules, plus `.mcp.json` |
+| **Cursor** | `--target cursor` | `.cursor/rules/*.mdc` with proper frontmatter, plus `AGENTS.md` |
+| **GitHub Copilot** | `--target copilot` | `.github/copilot-instructions.md`, agents, skills, prompts, plus `AGENTS.md` |
+| **Windsurf** | `--target windsurf` | `.windsurf/rules/*.md`, `.windsurfrules`, plus `AGENTS.md` |
+| **CrewAI** | `--target crewai` | Full Python project with `pyproject.toml`, `agents.yaml`, `tasks.yaml`, `crew.py`, tools |
+| **OpenAI** | `--target openai` | `openai-responses-config.json` (Responses API) and `openai-assistant-config.json` |
+| **Microsoft APM** | `--target apm` | `apm.yml`, `.apm/` directory, `AGENTS.md`, `CLAUDE.md` |
+
+## Importing Existing Agents
+
+### From any JSON export
+
+```bash
+agentpkg convert export.json --platform relevance-ai -o agent.agentpkg.zip
+```
+
+The adapter is fuzzy. It recognizes common key names like `systemPrompt`, `persona`, `soul`, `character`, `memories`, `knowledge_base`, and maps them automatically.
+
+### From OpenClaw
+
+```typescript
+import { convertOpenClaw } from "agentpkg/adapters/openclaw";
+
+const pkg = convertOpenClaw("~/.config/openclaw", {
+  includeSecrets: true,
+  extractSqliteMemories: true,
+});
+
+await pkg.pack("my-agent.agentpkg.zip", "migration-passphrase");
+```
+
+## Security Auditing
+
+Before installing an agent package you didn't write, scan it:
 
 ```bash
 agentpkg audit agent.agentpkg.zip
 ```
 
-- **Hidden unicode** (12 patterns): zero-width characters, RTL overrides, tag characters
-- **Prompt injection** (7 patterns): instruction overrides, jailbreak attempts, encoded payloads
-- **Suspicious tools** (7 patterns): credential harvesting, data exfiltration endpoints, shell execution
+The scanner checks for 26 threat patterns:
 
-## Project structure
+- **Hidden unicode** (12 patterns): zero width characters, RTL overrides, invisible tag characters
+- **Prompt injection** (7 patterns): instruction overrides, jailbreak attempts, encoded payloads
+- **Suspicious tools** (7 patterns): credential harvesting, data exfiltration, shell execution
+
+## CLI Commands
+
+```
+agentpkg init <name>           Create a new agent package
+agentpkg pack <dir>            Bundle into .agentpkg.zip
+agentpkg validate <path>       Check package structure is correct
+agentpkg inspect <path>        Show what's inside (including secret key names)
+agentpkg unpack <zip>          Extract a package
+agentpkg convert <json>        Convert a JSON export to agentpkg format
+agentpkg audit <path>          Run security scan
+agentpkg compile <path>        Compile to platform format
+```
+
+### Flags
+
+```
+--target <format>         Which platform (claude-code|cursor|copilot|windsurf|crewai|openai|apm|all)
+--passphrase <phrase>     Encrypt or decrypt the secrets vault
+--include-secrets         Include actual credential values when importing
+--platform <name>         Source platform name for the convert command
+-o <path>                 Where to write the output
+```
+
+## Safety Features
+
+agentpkg includes several protections:
+
+**Secrets are never written in plain text.** They're encrypted with AES-256-GCM and scrypt key derivation before touching disk. The vault stores key names (not values) so you can inspect without decrypting.
+
+**Archives are validated before extraction.** agentpkg reads file headers (magic bytes) to confirm a file is actually a zip or tar archive before extracting. Random or corrupted files are rejected with a clear error.
+
+**Shell commands use safe quoting.** All paths passed to zip/tar/unzip are single-quoted to prevent injection from directory names with spaces or special characters.
+
+**Subagents are checked for integrity.** You can't add two subagents with the same name (which would silently overwrite each other). You also can't create circular references where agent A contains agent B which contains agent A.
+
+**Format versions are checked on load.** If you try to load a package created by a newer version of agentpkg, you'll get a clear error telling you to upgrade instead of silently loading corrupt data.
+
+**Generated code is properly escaped.** Agent names and descriptions with quotes, newlines, colons, or special characters produce valid YAML, Python, and TOML. No more broken output from unusual names.
+
+## Project Structure
 
 ```
 src/
-├── types.ts              285 lines    All interfaces and type definitions
-├── index.ts              853 lines    AgentPackage class, validator, JSON adapter
-├── compile.ts            637 lines    7 compile targets with native directory structures
-├── secrets.ts            320 lines    AES-256-GCM encrypted vault with scrypt KDF
+├── types.ts              285 lines    Type definitions
+├── index.ts              943 lines    AgentPackage class, validation, JSON adapter
+├── compile.ts            698 lines    7 platform compilers
+├── secrets.ts            346 lines    Encrypted vault (AES-256-GCM + scrypt)
 ├── audit.ts              155 lines    Security scanner
-├── deps.ts               192 lines    Dependency resolver with lockfile
+├── deps.ts               192 lines    Dependency resolver
 └── adapters/
-    └── openclaw.ts       669 lines    Dedicated OpenClaw filesystem adapter
+    └── openclaw.ts       669 lines    OpenClaw filesystem adapter
 bin/
-└── cli.ts                297 lines    CLI with 8 commands
+└── cli.ts                297 lines    CLI (8 commands)
 test/
-└── test.js               307 lines    20 tests
+└── test.js               412 lines    30 tests
 ```
 
-3,408 lines of TypeScript. Zero runtime dependencies. 20 tests.
+~4,000 lines of TypeScript. Zero runtime dependencies. 30 tests covering core operations, edge cases, and security validations.
 
 ## Contributing
 
 ```bash
-git clone https://github.com/yourusername/agentpkg.git
+git clone https://github.com/anthropics/agentpkg.git
 cd agentpkg
 npm install
-npm test        # 20 tests
-npm run build   # TypeScript → dist/
+npm test        # 30 tests
+npm run build   # TypeScript -> dist/
 ```
 
 ## License
