@@ -250,6 +250,25 @@ function guessSecretType(key: string, value: string): Secret["type"] {
 // ─────────────────────────────────────────────
 
 /**
+ * Quote a value for safe use in a .env file. Wraps in double quotes and
+ * escapes embedded double-quotes, backslashes, newlines, and carriage returns
+ * so the value cannot inject additional env vars.
+ */
+function envQuote(value: string): string {
+  const escaped = value
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r");
+  return `"${escaped}"`;
+}
+
+/** Escape a string for safe use inside a RegExp. */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
  * After compiling, inject decrypted secrets into the target's native format.
  * Each platform stores credentials differently.
  */
@@ -303,11 +322,11 @@ function injectCrewAI(secrets: Secret[], outputDir: string): void {
   for (const secret of secrets) {
     const envKey = secret.key.toUpperCase().replace(/-/g, "_");
     // Replace placeholder or append
-    const pattern = new RegExp(`^#?\\s*${envKey}=.*$`, "m");
+    const pattern = new RegExp(`^#?\\s*${escapeRegExp(envKey)}=.*$`, "m");
     if (pattern.test(content)) {
-      content = content.replace(pattern, `${envKey}=${secret.value}`);
+      content = content.replace(pattern, `${envKey}=${envQuote(secret.value)}`);
     } else {
-      content += `${envKey}=${secret.value}\n`;
+      content += `${envKey}=${envQuote(secret.value)}\n`;
     }
   }
 
@@ -339,7 +358,7 @@ function injectDotEnv(secrets: Secret[], outputDir: string): void {
 
   for (const secret of secrets) {
     const envKey = secret.key.toUpperCase().replace(/-/g, "_");
-    content += `${envKey}=${secret.value}\n`;
+    content += `${envKey}=${envQuote(secret.value)}\n`;
   }
 
   fs.writeFileSync(envPath, content, "utf-8");

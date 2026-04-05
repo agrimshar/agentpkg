@@ -4,6 +4,11 @@ import * as os from "os";
 import { execSync } from "child_process";
 import type { AuditSeverity, AuditCategory, AuditFinding, AuditSummary } from "./types";
 
+/** Quote a path for safe use as a single POSIX shell argument. */
+function shq(s: string): string {
+  return `'${s.replace(/'/g, `'\\''`)}'`;
+}
+
 // ─────────────────────────────────────────────
 // Threat patterns
 // ─────────────────────────────────────────────
@@ -147,8 +152,8 @@ export function auditDirectory(dirPath: string, basePath?: string): AuditResult 
 
 export function auditZip(zipPath: string): AuditResult {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agentpkg-audit-"));
-  try { execSync(`unzip -o "${zipPath}" -d "${tmpDir}"`, { stdio: "pipe" }); }
-  catch { try { execSync(`tar -xf "${zipPath}" -C "${tmpDir}"`, { stdio: "pipe" }); } catch { throw new Error("Cannot extract"); } }
+  try { execSync(`unzip -oq ${shq(zipPath)} -d ${shq(tmpDir)}`, { stdio: "pipe" }); }
+  catch { try { execSync(`tar -xf ${shq(zipPath)} -C ${shq(tmpDir)}`, { stdio: "pipe" }); } catch { throw new Error("Cannot extract"); } }
   const result = auditDirectory(tmpDir);
   fs.rmSync(tmpDir, { recursive: true, force: true });
   return result;

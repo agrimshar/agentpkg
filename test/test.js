@@ -407,6 +407,55 @@ test("initScaffold creates scaffold", () => {
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
+  // ── Security regression tests ──
+
+  test("safeName blocks path traversal in memory IDs", () => {
+    const pkg = new AgentPackage({ name: "test" });
+    pkg.addMemory({ id: "../../etc/cron.d/evil", content: "payload" });
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "agentpkg-ts-"));
+    const dir = pkg.writeToDir(tmp);
+    // The file should be written inside memories/entries, not escaped to /etc
+    const entries = fs.readdirSync(path.join(dir, "memories", "entries"));
+    for (const e of entries) {
+      assert.ok(!e.includes(".."), `memory file should not contain ..: ${e}`);
+    }
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  test("safeName blocks path traversal in skill names", () => {
+    const pkg = new AgentPackage({ name: "test" });
+    pkg.addSkill({ name: "../../../tmp/pwned", description: "evil" });
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "agentpkg-ts-"));
+    const dir = pkg.writeToDir(tmp);
+    // Should be contained inside skills/
+    const skillDirs = fs.readdirSync(path.join(dir, "skills")).filter(f => f !== "index.json");
+    for (const d of skillDirs) {
+      assert.ok(!d.includes(".."), `skill dir should not contain ..: ${d}`);
+    }
+    // And /tmp/pwned should NOT exist
+    assert.ok(!fs.existsSync("/tmp/pwned"), "path traversal should not create /tmp/pwned");
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  test("envQuote prevents .env injection via newlines in secret values", () => {
+    const { encryptSecrets, decryptSecrets, injectSecrets } = require("../dist/src/secrets");
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "agentpkg-ts-"));
+    // A malicious secret value with embedded newlines trying to inject EVIL_VAR
+    const secrets = [
+      { key: "normal-key", value: 'real-value\nEVIL_VAR=malicious', type: "api_key" },
+      { key: "has-quotes", value: 'value with "quotes" inside', type: "token" },
+    ];
+    injectSecrets(secrets, "cursor", tmp); // cursor uses generic .env injection
+    const envContent = fs.readFileSync(path.join(tmp, ".env"), "utf-8");
+    // The EVIL_VAR should NOT appear as its own line/variable
+    const lines = envContent.split("\n").filter(l => l.trim() && !l.startsWith("#"));
+    const keys = lines.map(l => l.split("=")[0]);
+    assert.ok(!keys.includes("EVIL_VAR"), `newline injection should be blocked, got: ${envContent}`);
+    // Values should be double-quoted
+    assert.ok(envContent.includes('NORMAL_KEY="'), "values should be double-quoted");
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
   console.log(`\n${passed} passed, ${failed} failed\n`);
   process.exit(failed > 0 ? 1 : 0);
 })();

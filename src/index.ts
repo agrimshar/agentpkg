@@ -44,6 +44,25 @@ function now(): string {
 }
 
 /**
+ * Sanitize a user-supplied string for safe use as a filename or directory component.
+ * Strips path separators, dot-dot sequences, and null bytes. Throws on empty result.
+ */
+function safeName(name: string, label: string = "name"): string {
+  // Strip null bytes, path separators, and collapse to a single safe component.
+  let safe = name
+    .replace(/\0/g, "")
+    .replace(/\.\.\//g, "")
+    .replace(/\.\.\\/g, "")
+    .replace(/[/\\]/g, "_");
+  // After cleanup, path.basename strips any remaining leading directory components.
+  safe = path.basename(safe);
+  if (!safe || safe === "." || safe === "..") {
+    throw new Error(`Invalid ${label}: '${name}' resolves to an empty or unsafe path component`);
+  }
+  return safe;
+}
+
+/**
  * Validate a manifest's format version. Same major = compatible, different major = refuse.
  * Missing version = treat as pre-1.0 (warn once, best-effort load).
  */
@@ -480,7 +499,7 @@ export class AgentPackage {
         entries: this.memories.map((m) => ({ id: m.id, type: m.type, summary: m.content.slice(0, 80) })),
       });
       for (const mem of this.memories) {
-        writeJson(path.join(memDir, `${mem.id}.json`), mem);
+        writeJson(path.join(memDir, `${safeName(mem.id, "memory id")}.json`), mem);
       }
     }
 
@@ -491,11 +510,11 @@ export class AgentPackage {
         skills: this.skills.map((s) => ({ name: s.name, description: s.description })),
       });
       for (const skill of this.skills) {
-        const sd = path.join(skillsDir, skill.name);
+        const sd = path.join(skillsDir, safeName(skill.name, "skill name"));
         const { _handlerCode, instructions, ...skillMeta } = skill;
         writeJson(path.join(sd, "skill.json"), skillMeta);
         if (instructions) writeText(path.join(sd, "SKILL.md"), instructions);
-        if (_handlerCode) writeText(path.join(sd, skill.handlerFile), _handlerCode);
+        if (_handlerCode) writeText(path.join(sd, safeName(skill.handlerFile, "handler file")), _handlerCode);
       }
     }
 
@@ -506,10 +525,10 @@ export class AgentPackage {
         tools: this.tools.map((t) => ({ name: t.name, description: t.description })),
       });
       for (const tool of this.tools) {
-        const td = path.join(toolsDir, tool.name);
+        const td = path.join(toolsDir, safeName(tool.name, "tool name"));
         const { _handlerCode, ...toolMeta } = tool;
         writeJson(path.join(td, "tool.json"), toolMeta);
-        if (_handlerCode) writeText(path.join(td, tool.handlerFile), _handlerCode);
+        if (_handlerCode) writeText(path.join(td, safeName(tool.handlerFile, "handler file")), _handlerCode);
       }
     }
 
@@ -532,13 +551,14 @@ export class AgentPackage {
         const docDir = path.join(knowDir, "documents");
         fs.mkdirSync(docDir, { recursive: true });
         for (const doc of this.knowledgeDocs) {
-          if (Buffer.isBuffer(doc.content)) fs.writeFileSync(path.join(docDir, doc.filename), doc.content);
-          else writeText(path.join(docDir, doc.filename), doc.content);
+          const fname = safeName(doc.filename, "knowledge doc filename");
+          if (Buffer.isBuffer(doc.content)) fs.writeFileSync(path.join(docDir, fname), doc.content);
+          else writeText(path.join(docDir, fname), doc.content);
         }
       }
       if (this.knowledgeStructured.length) {
         const structDir = path.join(knowDir, "structured");
-        for (const sd of this.knowledgeStructured) writeJson(path.join(structDir, sd.filename), sd.data);
+        for (const sd of this.knowledgeStructured) writeJson(path.join(structDir, safeName(sd.filename, "structured data filename")), sd.data);
       }
     }
 
