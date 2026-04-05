@@ -4,5 +4,6 @@ dist/
 .env
 .DS_Store
 *.log
+*.tar.gz
 coverage/
 .nyc_output/
