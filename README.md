@@ -328,7 +328,7 @@ test/
 ## Contributing
 
 ```bash
-git clone https://github.com/anthropics/agentpkg.git
+git clone https://github.com/agrimshar/agentpkg.git
 cd agentpkg
 npm install
 npm test        # 30 tests
