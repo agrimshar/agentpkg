@@ -1,5 +1,6 @@
 node_modules/
 dist/
+.planning/
 *.agentpkg.zip
 .env
 .DS_Store
