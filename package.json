@@ -1,5 +1,5 @@
 {
-  "name": "agentpkg",
+  "name": "universal-agent",
   "version": "1.0.0",
   "description": "Universal AI agent packaging format — bundle souls, memories, skills, tools, crons, subagents, and encrypted secrets into a single portable archive, then compile to any platform.",
   "main": "dist/src/index.js",
@@ -44,13 +44,13 @@
     "mcp", "agent-framework", "agent-migration", "orchestration",
     "skills", "memories", "tools", "secrets", "typescript"
   ],
-  "author": "",
+  "author": "agrimshar",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "https://github.com/agrimshar/agentpkg.git"
   },
-  "homepage": "",
+  "homepage": "https://github.com/agrimshar/agentpkg",
   "engines": {
     "node": ">=18.0.0"
   },
