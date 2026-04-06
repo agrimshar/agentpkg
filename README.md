@@ -82,9 +82,45 @@ agentpkg compile my-agent.agentpkg.zip --target all -o ./output
 
 That's it. Your `./output` folder now has the real native files each platform expects.
 
+## Tutorial: Build an Agent Interactively
+
+If you don't want to edit files by hand, use the interactive builder:
+
+```bash
+agentpkg create
+```
+
+It walks you through everything: name, description, system prompt, model, temperature, rules, memories, and skills. Just answer the questions and your agent is ready.
+
+You can also add things to an existing agent anytime:
+
+```bash
+agentpkg add memory my-agent.agentpkg     # teach it something new
+agentpkg add skill my-agent.agentpkg      # give it a new ability
+agentpkg add rule my-agent.agentpkg       # add a guardrail
+agentpkg add secret my-agent.agentpkg     # add an API key
+agentpkg add cron my-agent.agentpkg       # schedule a task
+agentpkg add tool my-agent.agentpkg       # define a tool
+```
+
+Or update existing settings:
+
+```bash
+agentpkg set soul my-agent.agentpkg       # rewrite the personality
+agentpkg set model my-agent.agentpkg      # switch to a different model
+agentpkg set description my-agent.agentpkg
+```
+
+Then pack and compile as usual:
+
+```bash
+agentpkg pack my-agent.agentpkg
+agentpkg compile my-agent.agentpkg.zip --target all -o ./output
+```
+
 ## Tutorial: Using the Library in Code
 
-If you want to build agents programmatically instead of editing files by hand:
+If you want to build agents programmatically:
 
 ```typescript
 import { AgentPackage } from "universal-agent";
@@ -268,15 +304,37 @@ The scanner checks for 26 threat patterns:
 
 ## CLI Commands
 
+### Create and Modify (interactive)
+
 ```
-agentpkg init <name>           Create a new agent package
-agentpkg pack <dir>            Bundle into .agentpkg.zip
-agentpkg validate <path>       Check package structure is correct
-agentpkg inspect <path>        Show what's inside (including secret key names)
-agentpkg unpack <zip>          Extract a package
-agentpkg convert <json>        Convert a JSON export to agentpkg format
-agentpkg audit <path>          Run security scan
-agentpkg compile <path>        Compile to platform format
+agentpkg create                        Build an agent step by step
+agentpkg add memory <dir>              Add memories interactively
+agentpkg add skill <dir>               Add skills with instructions
+agentpkg add tool <dir>                Add tool definitions
+agentpkg add secret <dir>              Add secrets (encrypted when packing)
+agentpkg add cron <dir>                Add scheduled tasks
+agentpkg add rule <dir>                Add guardrail rules
+agentpkg set soul <dir>                Rewrite the system prompt
+agentpkg set model <dir>               Change the model and temperature
+agentpkg set description <dir>         Update the agent description
+```
+
+### Build and Deploy
+
+```
+agentpkg init <name>                   Scaffold an empty agent package
+agentpkg pack <dir>                    Bundle into .agentpkg.zip
+agentpkg compile <path>                Compile to platform format
+```
+
+### Inspect and Verify
+
+```
+agentpkg validate <path>               Check package structure is correct
+agentpkg inspect <path>                Show what's inside (including secret key names)
+agentpkg unpack <zip>                  Extract a package
+agentpkg convert <json>                Convert a JSON export to agentpkg format
+agentpkg audit <path>                  Run security scan
 ```
 
 ### Flags
@@ -310,20 +368,20 @@ agentpkg includes several protections:
 ```
 src/
 ├── types.ts              285 lines    Type definitions
-├── index.ts              943 lines    AgentPackage class, validation, JSON adapter
+├── index.ts              963 lines    AgentPackage class, validation, JSON adapter
 ├── compile.ts            698 lines    7 platform compilers
-├── secrets.ts            346 lines    Encrypted vault (AES-256-GCM + scrypt)
-├── audit.ts              155 lines    Security scanner
+├── secrets.ts            365 lines    Encrypted vault (AES-256-GCM + scrypt)
+├── audit.ts              160 lines    Security scanner
 ├── deps.ts               192 lines    Dependency resolver
 └── adapters/
     └── openclaw.ts       669 lines    OpenClaw filesystem adapter
 bin/
-└── cli.ts                297 lines    CLI (8 commands)
+└── cli.ts                781 lines    CLI (11 commands + interactive builders)
 test/
-└── test.js               412 lines    33 tests
+└── test.js               985 lines    74 tests
 ```
 
-~4,000 lines of TypeScript. Zero runtime dependencies. 33 tests covering core operations, edge cases, and security validations.
+~5,100 lines of TypeScript. Zero runtime dependencies. 74 tests covering core operations, compile targets, security, edge cases, and CLI commands.
 
 ## Contributing
 
@@ -331,7 +389,7 @@ test/
 git clone https://github.com/agrimshar/agentpkg.git
 cd agentpkg
 npm install
-npm test        # 33 tests
+npm test        # 74 tests
 npm run build   # TypeScript -> dist/
 ```
 
