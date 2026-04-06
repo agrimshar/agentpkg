@@ -4,6 +4,8 @@ import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
 import { AgentPackage, convertFromJSON, validate, validateZip, initScaffold, slugify, FORMAT_VERSION } from "../src/index";
+
+const PKG_VERSION: string = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "..", "package.json"), "utf-8")).version;
 import { auditDirectory, auditZip } from "../src/audit";
 import { compile as compileTarget, compileAll, targets } from "../src/compile";
 import { vaultInfo, readVault, injectSecrets } from "../src/secrets";
@@ -717,7 +719,7 @@ async function cmdSet(args: string[]) {
 // ── Help ──
 
 function showHelp() {
-  log(`\n${c.cyan}${c.bold}  agentpkg${c.reset}  v${FORMAT_VERSION} — Universal AI Agent Package Format\n`);
+  log(`\n${c.cyan}${c.bold}  agentpkg${c.reset}  v${PKG_VERSION} — Universal AI Agent Package Format\n`);
   log(`${c.bold}CREATE & MODIFY${c.reset}`);
   log(`  ${c.cyan}create${c.reset}                          Interactive agent builder`);
   log(`  ${c.cyan}add${c.reset}       <type> <dir>          Add memory, skill, tool, secret, cron, or rule`);
@@ -773,6 +775,7 @@ async function main() {
   const args = process.argv.slice(2);
   const cmd = args[0];
   if (!cmd || cmd === "--help" || cmd === "-h") { showHelp(); return; }
+  if (cmd === "--version" || cmd === "-v") { log(PKG_VERSION); return; }
   if (!(cmd in commands)) { error(`Unknown: ${cmd}. Run agentpkg --help`); process.exit(1); }
   try { await commands[cmd](args.slice(1)); }
   catch (err) { error((err as Error).message); if (process.env.DEBUG) console.error(err); process.exit(1); }
