@@ -1068,6 +1068,75 @@ async function cmdSet(args: string[]) {
   log();
 }
 
+// ── Version check ──
+
+async function getLatestVersion(): Promise<string | null> {
+  try {
+    const https = await import("https");
+    return new Promise((resolve) => {
+      const req = https.get("https://registry.npmjs.org/universal-agent/latest", { timeout: 3000 }, (res) => {
+        let data = "";
+        res.on("data", (chunk: string) => { data += chunk; });
+        res.on("end", () => {
+          try { resolve(JSON.parse(data).version ?? null); }
+          catch { resolve(null); }
+        });
+      });
+      req.on("error", () => resolve(null));
+      req.on("timeout", () => { req.destroy(); resolve(null); });
+    });
+  } catch { return null; }
+}
+
+function compareVersions(current: string, latest: string): number {
+  const a = current.split(".").map(Number);
+  const b = latest.split(".").map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((a[i] ?? 0) < (b[i] ?? 0)) return -1;
+    if ((a[i] ?? 0) > (b[i] ?? 0)) return 1;
+  }
+  return 0;
+}
+
+async function checkForUpdate(): Promise<void> {
+  const latest = await getLatestVersion();
+  if (latest && compareVersions(PKG_VERSION, latest) < 0) {
+    log();
+    warn(`Update available: ${c.dim}${PKG_VERSION}${c.reset} → ${c.green}${c.bold}${latest}${c.reset}`);
+    log(`  Run ${c.cyan}npm install -g universal-agent@latest${c.reset} to update`);
+    log(`  Or ${c.cyan}agentpkg update${c.reset}`);
+    log();
+  }
+}
+
+async function cmdUpdate(_args: string[]) {
+  heading("Updating agentpkg");
+  const latest = await getLatestVersion();
+  if (!latest) {
+    error("Could not reach npm registry. Check your internet connection.");
+    process.exit(1);
+  }
+  if (compareVersions(PKG_VERSION, latest) >= 0) {
+    success(`Already on the latest version (${PKG_VERSION})`);
+    log();
+    return;
+  }
+  info(`Current: ${PKG_VERSION} → Latest: ${c.bold}${latest}${c.reset}`);
+  log();
+  const { execSync: exec } = await import("child_process");
+  try {
+    log(`  ${c.dim}Running: npm install -g universal-agent@latest${c.reset}`);
+    exec("npm install -g universal-agent@latest", { stdio: "inherit" });
+    log();
+    success(`Updated to ${latest}`);
+  } catch {
+    error("Update failed. Try running manually:");
+    log(`  ${c.cyan}npm install -g universal-agent@latest${c.reset}`);
+    process.exit(1);
+  }
+  log();
+}
+
 // ── Help ──
 
 function showHelp() {
@@ -1091,6 +1160,10 @@ function showHelp() {
   log(`  ${c.cyan}inspect${c.reset}   <path>                Show contents + secrets summary`);
   log(`  ${c.cyan}audit${c.reset}     <path>                Security scan`);
   log(`  ${c.cyan}unpack${c.reset}    <zip>                 Extract a package`);
+  log();
+  log(`${c.bold}OTHER${c.reset}`);
+  log(`  ${c.cyan}update${c.reset}                          Update agentpkg to latest version`);
+  log(`  ${c.cyan}--version${c.reset}                       Show version (warns if outdated)`);
   log();
   log(`${c.bold}COMPILE TARGETS${c.reset}  (--target <fmt>)`);
   log(`  claude-code | cursor | copilot | windsurf | crewai | openai | apm | all`);
@@ -1124,13 +1197,14 @@ const commands: Record<string, (args: string[]) => Promise<void>> = {
   create: cmdCreate, add: cmdAdd, set: cmdSet, import: cmdImport,
   init: cmdInit, pack: cmdPack, validate: cmdValidate, inspect: cmdInspect,
   unpack: cmdUnpack, convert: cmdConvert, audit: cmdAudit, compile: cmdCompile,
+  update: cmdUpdate,
 };
 
 async function main() {
   const args = process.argv.slice(2);
   const cmd = args[0];
   if (!cmd || cmd === "--help" || cmd === "-h") { showHelp(); return; }
-  if (cmd === "--version" || cmd === "-v") { log(PKG_VERSION); return; }
+  if (cmd === "--version" || cmd === "-v") { log(PKG_VERSION); await checkForUpdate(); return; }
   if (!(cmd in commands)) { error(`Unknown: ${cmd}. Run agentpkg --help`); process.exit(1); }
   try { await commands[cmd](args.slice(1)); }
   catch (err) { error((err as Error).message); if (process.env.DEBUG) console.error(err); process.exit(1); }
