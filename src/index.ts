@@ -236,6 +236,9 @@ export class AgentPackage {
     importance?: number;
     source?: string;
   }): this {
+    if (this.memories.some((m) => m.id === opts.id)) {
+      throw new Error(`Duplicate memory ID: '${opts.id}' already exists`);
+    }
     this.memories.push({
       id: opts.id,
       content: opts.content,

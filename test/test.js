@@ -40,6 +40,13 @@ test("addMemory appends correctly", () => {
   assert.strictEqual(pkg.memories[1].importance, 0.9);
 });
 
+test("addMemory rejects duplicate IDs", () => {
+  const pkg = new AgentPackage({ name: "test" });
+  pkg.addMemory({ id: "m1", content: "first" });
+  assert.throws(() => pkg.addMemory({ id: "m1", content: "duplicate" }), /duplicate memory id/i);
+  assert.strictEqual(pkg.memories.length, 1);
+});
+
 test("addSkill appends with handler code", () => {
   const pkg = new AgentPackage({ name: "test" });
   pkg.addSkill({ name: "search", description: "Search", handlerCode: "function s(){}", triggers: ["find"] });
