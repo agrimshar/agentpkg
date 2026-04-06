@@ -265,17 +265,57 @@ Each target produces the platform's actual native file structure:
 | **OpenAI** | `--target openai` | `openai-responses-config.json` (Responses API) and `openai-assistant-config.json` |
 | **Microsoft APM** | `--target apm` | `apm.yml`, `.apm/` directory, `AGENTS.md`, `CLAUDE.md` |
 
-## Importing Existing Agents
+## Tutorial: Import from Any Platform
 
-### From any JSON export
+The `import` command reads a platform's native directory and converts it to an agentpkg package. It auto-detects which platform you're importing from.
 
 ```bash
+# Just point it at a directory. It figures out the rest.
+agentpkg import ~/.config/openclaw
+agentpkg import ./my-cursor-project
+agentpkg import ./my-repo
+```
+
+### What it detects
+
+| Platform | How it's recognized |
+|---|---|
+| OpenClaw | `openclaw.json` or `workspace/SOUL.md` |
+| Claude Code | `CLAUDE.md` or `.claude/` directory |
+| Cursor | `.cursor/` or `.cursorrules` |
+| GitHub Copilot | `.github/copilot-instructions.md` |
+| Windsurf | `.windsurf/` or `.windsurfrules` |
+| CrewAI | `pyproject.toml` with crewai dependency |
+| APM | `apm.yml` or `.apm/` directory |
+
+### What it imports
+
+Each importer reads the platform's native files:
+
+- **System prompt** from wherever the platform stores it (CLAUDE.md, .cursorrules, copilot-instructions.md, etc.)
+- **Rules and guardrails** from rule directories (.claude/rules/, .cursor/rules/, .windsurf/rules/)
+- **Skills** from skill directories
+- **Subagents** from agent directories (.claude/agents/, .github/agents/)
+- **MCP integrations** from .mcp.json
+- **Secrets** (when you pass `--include-secrets`)
+
+### Examples
+
+```bash
+# Import OpenClaw with secrets
+agentpkg import ~/.config/openclaw --include-secrets --passphrase "my-key"
+
+# Import a Cursor project
+agentpkg import ./cursor-project -o my-agent.agentpkg.zip
+
+# Force a specific platform if auto-detection is wrong
+agentpkg import ./some-dir --platform copilot
+
+# Import a JSON export instead of a directory
 agentpkg convert export.json --platform relevance-ai -o agent.agentpkg.zip
 ```
 
-The adapter is fuzzy. It recognizes common key names like `systemPrompt`, `persona`, `soul`, `character`, `memories`, `knowledge_base`, and maps them automatically.
-
-### From OpenClaw
+### Using the OpenClaw adapter in code
 
 ```typescript
 import { convertOpenClaw } from "universal-agent/adapters/openclaw";
@@ -319,6 +359,13 @@ agentpkg set model <dir>               Change the model and temperature
 agentpkg set description <dir>         Update the agent description
 ```
 
+### Import
+
+```
+agentpkg import <dir>                  Import from any platform (auto-detects)
+agentpkg convert <json>                Convert a JSON export to agentpkg format
+```
+
 ### Build and Deploy
 
 ```
@@ -333,7 +380,6 @@ agentpkg compile <path>                Compile to platform format
 agentpkg validate <path>               Check package structure is correct
 agentpkg inspect <path>                Show what's inside (including secret key names)
 agentpkg unpack <zip>                  Extract a package
-agentpkg convert <json>                Convert a JSON export to agentpkg format
 agentpkg audit <path>                  Run security scan
 ```
 
@@ -368,7 +414,7 @@ agentpkg includes several protections:
 ```
 src/
 ├── types.ts              285 lines    Type definitions
-├── index.ts              963 lines    AgentPackage class, validation, JSON adapter
+├── index.ts              973 lines    AgentPackage class, validation, JSON adapter
 ├── compile.ts            698 lines    7 platform compilers
 ├── secrets.ts            365 lines    Encrypted vault (AES-256-GCM + scrypt)
 ├── audit.ts              160 lines    Security scanner
@@ -376,12 +422,12 @@ src/
 └── adapters/
     └── openclaw.ts       669 lines    OpenClaw filesystem adapter
 bin/
-└── cli.ts                781 lines    CLI (11 commands + interactive builders)
+└── cli.ts               1139 lines    CLI (12 commands + interactive builders + platform importers)
 test/
-└── test.js               985 lines    74 tests
+└── test.js              1239 lines    89 tests
 ```
 
-~5,100 lines of TypeScript. Zero runtime dependencies. 74 tests covering core operations, compile targets, security, edge cases, and CLI commands.
+~5,700 lines of TypeScript. Zero runtime dependencies. 89 tests covering core operations, all compile targets, all platform importers, full round-trip flows, security validations, and CLI commands.
 
 ## Contributing
 
@@ -389,7 +435,7 @@ test/
 git clone https://github.com/agrimshar/agentpkg.git
 cd agentpkg
 npm install
-npm test        # 74 tests
+npm test        # 89 tests
 npm run build   # TypeScript -> dist/
 ```
 
