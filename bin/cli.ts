@@ -490,18 +490,30 @@ async function cmdImport(args: string[]) {
   if (pkg.secrets.length) log(`  Secrets: ${c.yellow}${pkg.secrets.length} (will be encrypted)${c.reset}`);
   log();
 
-  // Pack
-  const result = await pkg.pack(output, passphrase);
-  success(`Packed: ${c.bold}${result.path}`);
-  info(`Size: ${(result.size / 1024).toFixed(1)} KB`);
-  info(`SHA256: ${c.dim}${result.checksum}${c.reset}`);
-  if (passphrase && pkg.secrets.length) {
-    success(`${pkg.secrets.length} secret(s) encrypted in vault`);
+  // Write output
+  const noZip = hasFlag(args, "--no-zip");
+  if (noZip) {
+    const outDir = output || ".";
+    const dir = pkg.writeToDir(outDir);
+    success(`Written to: ${c.bold}${dir}`);
+    log();
+    info("Next steps:");
+    log(`  ${c.cyan}agentpkg pack ${dir}${c.reset}                          Bundle into a .zip`);
+    log(`  ${c.cyan}agentpkg compile ${dir} --target all -o ./output${c.reset}  Compile directly`);
+    log(`  ${c.cyan}agentpkg add memory ${dir}${c.reset}                     Add more stuff`);
+  } else {
+    const result = await pkg.pack(output, passphrase);
+    success(`Packed: ${c.bold}${result.path}`);
+    info(`Size: ${(result.size / 1024).toFixed(1)} KB`);
+    info(`SHA256: ${c.dim}${result.checksum}${c.reset}`);
+    if (passphrase && pkg.secrets.length) {
+      success(`${pkg.secrets.length} secret(s) encrypted in vault`);
+    }
+    log();
+    info("Next steps:");
+    log(`  ${c.cyan}agentpkg inspect ${result.path}${c.reset}`);
+    log(`  ${c.cyan}agentpkg compile ${result.path} --target all -o ./output${c.reset}`);
   }
-  log();
-  info("Next steps:");
-  log(`  ${c.cyan}agentpkg inspect ${result.path}${c.reset}`);
-  log(`  ${c.cyan}agentpkg compile ${result.path} --target all -o ./output${c.reset}`);
   log();
 }
 
