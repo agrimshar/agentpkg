@@ -1,6 +1,6 @@
 {
   "name": "universal-agent",
-  "version": "1.0.1",
+  "version": "2.0.0",
   "description": "Universal AI agent packaging format — bundle souls, memories, skills, tools, crons, subagents, and encrypted secrets into a single portable archive, then compile to any platform.",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
