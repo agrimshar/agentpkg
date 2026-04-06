@@ -383,13 +383,21 @@ agentpkg unpack <zip>                  Extract a package
 agentpkg audit <path>                  Run security scan
 ```
 
+### Other
+
+```
+agentpkg update                        Update to latest version
+agentpkg --version                     Show version (warns if outdated)
+```
+
 ### Flags
 
 ```
 --target <format>         Which platform (claude-code|cursor|copilot|windsurf|crewai|openai|apm|all)
 --passphrase <phrase>     Encrypt or decrypt the secrets vault
 --include-secrets         Include actual credential values when importing
---platform <name>         Source platform name for the convert command
+--no-zip                  Write unzipped directory instead of .zip (for import)
+--platform <name>         Source platform name for the import/convert command
 -o <path>                 Where to write the output
 ```
 
@@ -403,7 +411,7 @@ agentpkg includes several protections:
 
 **Shell commands use safe quoting.** All paths passed to zip/tar/unzip are single-quoted to prevent injection from directory names with spaces or special characters.
 
-**Subagents are checked for integrity.** You can't add two subagents with the same name (which would silently overwrite each other). You also can't create circular references where agent A contains agent B which contains agent A.
+**Duplicates are caught early.** You can't add two subagents with the same name (which would silently overwrite each other), and you can't add two memories with the same ID. Circular subagent references are also detected and rejected.
 
 **Format versions are checked on load.** If you try to load a package created by a newer version of agentpkg, you'll get a clear error telling you to upgrade instead of silently loading corrupt data.
 
@@ -414,7 +422,7 @@ agentpkg includes several protections:
 ```
 src/
 ├── types.ts              285 lines    Type definitions
-├── index.ts              973 lines    AgentPackage class, validation, JSON adapter
+├── index.ts              976 lines    AgentPackage class, validation, JSON adapter
 ├── compile.ts            698 lines    7 platform compilers
 ├── secrets.ts            365 lines    Encrypted vault (AES-256-GCM + scrypt)
 ├── audit.ts              160 lines    Security scanner
@@ -422,12 +430,12 @@ src/
 └── adapters/
     └── openclaw.ts       669 lines    OpenClaw filesystem adapter
 bin/
-└── cli.ts               1139 lines    CLI (12 commands + interactive builders + platform importers)
+└── cli.ts               1225 lines    CLI (13 commands + interactive builders + platform importers)
 test/
-└── test.js              1239 lines    89 tests
+└── test.js              1246 lines    90 tests
 ```
 
-~5,700 lines of TypeScript. Zero runtime dependencies. 89 tests covering core operations, all compile targets, all platform importers, full round-trip flows, security validations, and CLI commands.
+~5,800 lines of TypeScript. Zero runtime dependencies. 90 tests covering core operations, all compile targets, all platform importers, full round-trip flows, security validations, and CLI commands.
 
 ## Contributing
 
@@ -435,7 +443,7 @@ test/
 git clone https://github.com/agrimshar/agentpkg.git
 cd agentpkg
 npm install
-npm test        # 89 tests
+npm test        # 90 tests
 npm run build   # TypeScript -> dist/
 ```
 
