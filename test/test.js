@@ -980,6 +980,260 @@ test("initScaffold creates scaffold", () => {
     assert.strictEqual(slugify("mixed-CASE with spaces"), "mixed-case-with-spaces");
   });
 
+  // ══════════════════════════════════════════════════════
+  // Import command tests
+  // ══════════════════════════════════════════════════════
+
+  // Helper: create a mock platform directory and import via CLI
+  function mkImportDir() { return fs.mkdtempSync(path.join(os.tmpdir(), "agentpkg-import-")); }
+  const cliPath = path.join(__dirname, "..", "dist", "bin", "cli.js");
+  const { execSync } = require("child_process");
+
+  // ── Claude Code import ──
+
+  await testAsync("import detects and imports Claude Code directory", async () => {
+    const root = mkImportDir();
+    const dir = path.join(root, "my-claude-project");
+    fs.mkdirSync(path.join(dir, ".claude", "rules"), { recursive: true });
+    fs.mkdirSync(path.join(dir, ".claude", "skills", "code-review"), { recursive: true });
+    fs.mkdirSync(path.join(dir, ".claude", "agents"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "CLAUDE.md"), "You are a senior TypeScript engineer.\nAlways write tests.");
+    fs.writeFileSync(path.join(dir, ".claude", "rules", "testing.md"), "All code must have unit tests.");
+    fs.writeFileSync(path.join(dir, ".claude", "skills", "code-review", "SKILL.md"), "# Code Review\nCheck for bugs and security issues.");
+    fs.writeFileSync(path.join(dir, ".mcp.json"), JSON.stringify({ mcpServers: { slack: { url: "https://slack.example.com/sse" }, github: { url: "https://github.mcp.dev" } } }));
+    const output = execSync(`AGENTPKG_SILENT=1 node ${cliPath} import ${dir} -o ${path.join(root, "out.zip")}`, { encoding: "utf-8" });
+    assert.ok(output.includes("claude-code"), "should detect claude-code");
+    assert.ok(output.includes("Soul"), "should import soul");
+    assert.ok(output.includes("Skills"), "should import skills");
+    assert.ok(output.includes("Integrations"), "should import integrations");
+    assert.ok(fs.existsSync(path.join(root, "out.zip")), "should create zip");
+    // Verify roundtrip: load the packed zip and check contents
+    const loaded = await AgentPackage.fromZip(path.join(root, "out.zip"));
+    assert.ok(loaded.systemPrompt.includes("senior TypeScript"), "soul should be imported");
+    assert.strictEqual(loaded.skills.length, 1);
+    assert.strictEqual(loaded.skills[0].name, "code-review");
+    assert.ok(loaded.skills[0].instructions.includes("bugs and security"));
+    assert.strictEqual(loaded.integrations.length, 2);
+    assert.ok(loaded.guardrails.rules.length > 0, "rules should be imported as guardrails");
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  // ── Cursor import ──
+
+  await testAsync("import detects and imports Cursor directory", async () => {
+    const root = mkImportDir();
+    const dir = path.join(root, "cursor-proj");
+    fs.mkdirSync(path.join(dir, ".cursor", "rules"), { recursive: true });
+    fs.writeFileSync(path.join(dir, ".cursor", "rules", "project.mdc"), "---\ndescription: Main rules\n---\nYou are a Python data scientist.");
+    fs.writeFileSync(path.join(dir, ".cursor", "rules", "style.mdc"), "Use type hints everywhere.");
+    const output = execSync(`AGENTPKG_SILENT=1 node ${cliPath} import ${dir} -o ${path.join(root, "out.zip")}`, { encoding: "utf-8" });
+    assert.ok(output.includes("cursor"), "should detect cursor");
+    assert.ok(output.includes("Soul"), "should import soul");
+    const loaded = await AgentPackage.fromZip(path.join(root, "out.zip"));
+    assert.ok(loaded.systemPrompt.includes("Python data scientist"), "project.mdc should become soul");
+    assert.ok(loaded.guardrails.rules.length > 0, "other rules should become guardrails");
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  await testAsync("import handles .cursorrules legacy file", async () => {
+    const root = mkImportDir();
+    const dir = path.join(root, "cursor-legacy");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, ".cursorrules"), "You are a Go expert.\nAlways handle errors.");
+    const output = execSync(`AGENTPKG_SILENT=1 node ${cliPath} import ${dir} -o ${path.join(root, "out.zip")}`, { encoding: "utf-8" });
+    assert.ok(output.includes("cursor"), "should detect cursor");
+    const loaded = await AgentPackage.fromZip(path.join(root, "out.zip"));
+    assert.ok(loaded.systemPrompt.includes("Go expert"), ".cursorrules should become soul");
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  // ── Copilot import ──
+
+  await testAsync("import detects and imports Copilot directory", async () => {
+    const root = mkImportDir();
+    const dir = path.join(root, "copilot-proj");
+    fs.mkdirSync(path.join(dir, ".github", "agents"), { recursive: true });
+    fs.mkdirSync(path.join(dir, ".github", "skills", "deploy"), { recursive: true });
+    fs.writeFileSync(path.join(dir, ".github", "copilot-instructions.md"), "You are a DevOps specialist.\nFocus on CI/CD pipelines.");
+    fs.writeFileSync(path.join(dir, ".github", "agents", "reviewer.md"), "You review pull requests for quality.");
+    fs.writeFileSync(path.join(dir, ".github", "skills", "deploy", "SKILL.md"), "# Deploy\nRun the deployment pipeline.");
+    const output = execSync(`AGENTPKG_SILENT=1 node ${cliPath} import ${dir} -o ${path.join(root, "out.zip")}`, { encoding: "utf-8" });
+    assert.ok(output.includes("copilot"), "should detect copilot");
+    const loaded = await AgentPackage.fromZip(path.join(root, "out.zip"));
+    assert.ok(loaded.systemPrompt.includes("DevOps specialist"), "instructions should become soul");
+    assert.strictEqual(loaded.subagents.length, 1, "agents should become subagents");
+    assert.strictEqual(loaded.subagents[0].identity.name, "reviewer");
+    assert.ok(loaded.subagents[0].systemPrompt.includes("pull requests"));
+    assert.strictEqual(loaded.skills.length, 1, "skills should be imported");
+    assert.strictEqual(loaded.skills[0].name, "deploy");
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  // ── Windsurf import ──
+
+  await testAsync("import detects and imports Windsurf directory", async () => {
+    const root = mkImportDir();
+    const dir = path.join(root, "ws-proj");
+    fs.mkdirSync(path.join(dir, ".windsurf", "rules"), { recursive: true });
+    fs.writeFileSync(path.join(dir, ".windsurfrules"), "You are a Rust systems programmer.");
+    fs.writeFileSync(path.join(dir, ".windsurf", "rules", "project.md"), "Always use safe Rust.");
+    fs.writeFileSync(path.join(dir, ".windsurf", "rules", "memory.md"), "Prefer stack allocation.");
+    const output = execSync(`AGENTPKG_SILENT=1 node ${cliPath} import ${dir} -o ${path.join(root, "out.zip")}`, { encoding: "utf-8" });
+    assert.ok(output.includes("windsurf"), "should detect windsurf");
+    const loaded = await AgentPackage.fromZip(path.join(root, "out.zip"));
+    assert.ok(loaded.systemPrompt.includes("Rust systems programmer"), ".windsurfrules should become soul");
+    assert.ok(loaded.guardrails.rules.length > 0, "rules should be imported as guardrails");
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  // ── APM import ──
+
+  await testAsync("import detects APM directory", async () => {
+    const root = mkImportDir();
+    const dir = path.join(root, "apm-proj");
+    fs.mkdirSync(path.join(dir, ".apm"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "apm.yml"), "name: test-agent\nversion: 1.0");
+    const output = execSync(`AGENTPKG_SILENT=1 node ${cliPath} import ${dir} -o ${path.join(root, "out.zip")}`, { encoding: "utf-8" });
+    assert.ok(output.includes("apm"), "should detect apm");
+    assert.ok(fs.existsSync(path.join(root, "out.zip")));
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  // ── CrewAI import ──
+
+  await testAsync("import detects CrewAI directory", async () => {
+    const root = mkImportDir();
+    const dir = path.join(root, "crew-proj");
+    fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "pyproject.toml"), '[project]\nname = "test"\ndependencies = ["crewai[tools]>=0.100.0"]');
+    const output = execSync(`AGENTPKG_SILENT=1 node ${cliPath} import ${dir} -o ${path.join(root, "out.zip")}`, { encoding: "utf-8" });
+    assert.ok(output.includes("crewai"), "should detect crewai");
+    assert.ok(fs.existsSync(path.join(root, "out.zip")));
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  // ── Platform override ──
+
+  await testAsync("import respects --platform override", async () => {
+    const root = mkImportDir();
+    const dir = path.join(root, "forced");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "SYSTEM.md"), "You are a test agent.");
+    const output = execSync(`AGENTPKG_SILENT=1 node ${cliPath} import ${dir} --platform custom-platform -o ${path.join(root, "out.zip")}`, { encoding: "utf-8" });
+    assert.ok(output.includes("custom-platform"), "should use forced platform name");
+    const loaded = await AgentPackage.fromZip(path.join(root, "out.zip"));
+    assert.ok(loaded.systemPrompt.includes("test agent"), "SYSTEM.md should be picked up by generic importer");
+    assert.strictEqual(loaded.source.platform, "custom-platform");
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  // ── Unknown platform (generic importer) ──
+
+  await testAsync("import handles unknown platform with generic importer", async () => {
+    const root = mkImportDir();
+    const dir = path.join(root, "mystery");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "config.json"), JSON.stringify({ name: "Mystery Agent", systemPrompt: "You are mysterious.", memories: [{ id: "m1", content: "I remember things" }] }));
+    const output = execSync(`AGENTPKG_SILENT=1 node ${cliPath} import ${dir} -o ${path.join(root, "out.zip")}`, { encoding: "utf-8" });
+    assert.ok(output.includes("generic") || output.includes("Could not auto-detect"), "should fall back to generic");
+    const loaded = await AgentPackage.fromZip(path.join(root, "out.zip"));
+    assert.ok(loaded.systemPrompt.includes("mysterious"), "config.json should be parsed by generic importer");
+    assert.strictEqual(loaded.memories.length, 1);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  // ── agentpkg directory detection ──
+
+  await testAsync("import detects agentpkg directory and suggests pack", async () => {
+    const root = mkImportDir();
+    const dir = path.join(root, "already-agentpkg");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "manifest.json"), JSON.stringify({ format: "agentpkg", version: "1.0.0", agent: { name: "test" } }));
+    const output = execSync(`AGENTPKG_SILENT=1 node ${cliPath} import ${dir} 2>&1 || true`, { encoding: "utf-8" });
+    assert.ok(output.includes("already") || output.includes("pack"), "should suggest using pack instead");
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  // ── Full round-trip: import -> compile -> verify ──
+
+  await testAsync("full round-trip: import Claude Code -> compile to Cursor + Copilot + Windsurf", async () => {
+    const { compileAll } = require("../dist/src/compile");
+    const root = mkImportDir();
+    const dir = path.join(root, "roundtrip");
+    // Create a rich Claude Code project
+    fs.mkdirSync(path.join(dir, ".claude", "rules"), { recursive: true });
+    fs.mkdirSync(path.join(dir, ".claude", "skills", "testing"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "CLAUDE.md"), "You are a full-stack engineer. You write TypeScript and React.");
+    fs.writeFileSync(path.join(dir, ".claude", "rules", "quality.md"), "Always write tests. Never skip error handling.");
+    fs.writeFileSync(path.join(dir, ".claude", "skills", "testing", "SKILL.md"), "# Testing\nWrite unit tests with vitest.\nCover edge cases.");
+    fs.writeFileSync(path.join(dir, ".mcp.json"), JSON.stringify({ mcpServers: { db: { url: "https://db.mcp.dev" } } }));
+
+    // Import
+    execSync(`AGENTPKG_SILENT=1 node ${cliPath} import ${dir} -o ${path.join(root, "agent.zip")}`, { stdio: "pipe" });
+    assert.ok(fs.existsSync(path.join(root, "agent.zip")), "import should produce zip");
+
+    // Load and compile to all targets
+    const pkg = await AgentPackage.fromZip(path.join(root, "agent.zip"));
+    const compileDir = path.join(root, "compiled");
+    const results = compileAll(pkg, compileDir);
+
+    // Verify every target compiled without error
+    for (const [target, result] of Object.entries(results)) {
+      assert.ok(!result.error, `${target} should compile without error: ${result.error}`);
+    }
+
+    // Verify Cursor output has the soul
+    const cursorProject = fs.readFileSync(path.join(compileDir, "cursor", ".cursor", "rules", "project.mdc"), "utf-8");
+    assert.ok(cursorProject.includes("full-stack engineer"), "Cursor should contain the soul");
+
+    // Verify Copilot output has instructions
+    const copilotInstr = fs.readFileSync(path.join(compileDir, "copilot", ".github", "copilot-instructions.md"), "utf-8");
+    assert.ok(copilotInstr.includes("full-stack engineer"), "Copilot should contain the soul");
+
+    // Verify Windsurf output
+    const wsRules = fs.readFileSync(path.join(compileDir, "windsurf", ".windsurfrules"), "utf-8");
+    assert.ok(wsRules.includes("full-stack engineer"), "Windsurf should contain the soul");
+
+    // Verify CrewAI produced valid Python
+    const crewPy = fs.readFileSync(path.join(compileDir, "crewai", "src", "roundtrip", "crew.py"), "utf-8");
+    assert.ok(crewPy.includes("CrewBase"), "CrewAI should have valid Python");
+
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  // ── CLI error handling ──
+
+  await testAsync("import rejects nonexistent directory", async () => {
+    try {
+      execSync(`AGENTPKG_SILENT=1 node ${cliPath} import /nonexistent/path/abc123 2>&1`, { encoding: "utf-8" });
+      assert.fail("should have thrown");
+    } catch (err) {
+      assert.ok(err.stderr?.includes("not found") || err.stdout?.includes("not found"), "should show not found error");
+    }
+  });
+
+  await testAsync("import shows help with no args", async () => {
+    try {
+      execSync(`node ${cliPath} import 2>&1`, { encoding: "utf-8" });
+      assert.fail("should have exited with error");
+    } catch (err) {
+      const out = err.stdout || err.stderr || "";
+      assert.ok(out.includes("Usage") || out.includes("import"), "should show usage");
+    }
+  });
+
+  // ── CLI version flag ──
+
+  await testAsync("CLI --version prints version", async () => {
+    const output = execSync(`node ${cliPath} --version`, { encoding: "utf-8" }).trim();
+    assert.ok(/^\d+\.\d+\.\d+$/.test(output), `should print semver, got: ${output}`);
+  });
+
+  await testAsync("CLI -v prints version", async () => {
+    const output = execSync(`node ${cliPath} -v`, { encoding: "utf-8" }).trim();
+    assert.ok(/^\d+\.\d+\.\d+$/.test(output), `should print semver, got: ${output}`);
+  });
+
   console.log(`\n${passed} passed, ${failed} failed\n`);
   process.exit(failed > 0 ? 1 : 0);
 })();

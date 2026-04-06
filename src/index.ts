@@ -687,6 +687,16 @@ export class AgentPackage {
       pkg.crons = JSON.parse(fs.readFileSync(cronPath, "utf-8")).jobs ?? [];
     }
 
+    const subDir = path.join(dirPath, "subagents");
+    if (fs.existsSync(subDir)) {
+      for (const entry of fs.readdirSync(subDir).filter(e => e.endsWith(".agentpkg"))) {
+        const subPath = path.join(subDir, entry);
+        if (fs.statSync(subPath).isDirectory()) {
+          pkg.subagents.push(AgentPackage.fromDir(subPath));
+        }
+      }
+    }
+
     const connPath = path.join(dirPath, "integrations", "connections.json");
     if (fs.existsSync(connPath)) {
       pkg.integrations = JSON.parse(fs.readFileSync(connPath, "utf-8")).connections ?? [];
