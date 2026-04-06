@@ -37,10 +37,10 @@ const HIDDEN_UNICODE: ThreatPattern[] = [
 const PROMPT_INJECTION: ThreatPattern[] = [
   { name: "Ignore previous instructions", pattern: /ignore\s+(all\s+)?(previous|above|prior)\s+(instructions|prompts|rules)/i, severity: "critical" },
   { name: "System prompt override", pattern: /you\s+are\s+now\s+(a|an)\s+/i, severity: "high" },
-  { name: "Jailbreak attempt", pattern: /(DAN|do\s+anything\s+now|jailbreak)/i, severity: "critical" },
+  { name: "Jailbreak attempt", pattern: /(\bDAN\b\s+mode|do\s+anything\s+now|jailbreak\s+(mode|prompt))/i, severity: "critical" },
   { name: "Role reassignment", pattern: /from\s+now\s+on,?\s+you\s+(are|will\s+be|should\s+act)/i, severity: "high" },
   { name: "Hidden instruction marker", pattern: /\[SYSTEM\]|\[INST\]|<\|im_start\|>|<<SYS>>|<\|system\|>/i, severity: "critical" },
-  { name: "Base64 encoded content", pattern: /(?:[A-Za-z0-9+/]{60,}={0,2})/g, severity: "medium" },
+  { name: "Base64 encoded content", pattern: /(?:[A-Za-z0-9+/]{80,}={0,2})/g, severity: "medium" },
   { name: "Encoded instructions", pattern: /eval\(|exec\(|Function\(/g, severity: "high" },
 ];
 
