@@ -153,6 +153,358 @@ async function cmdUnpack(args: string[]) {
   log();
 }
 
+// ── Platform detection for import ──
+
+interface DetectedPlatform {
+  name: string;
+  confidence: "high" | "medium" | "low";
+  markers: string[];
+}
+
+function detectPlatform(dirPath: string): DetectedPlatform | null {
+  const exists = (p: string) => fs.existsSync(path.join(dirPath, p));
+
+  // OpenClaw: openclaw.json or workspace/SOUL.md
+  if (exists("openclaw.json") || (exists("workspace") && exists("workspace/SOUL.md"))) {
+    const markers = [];
+    if (exists("openclaw.json")) markers.push("openclaw.json");
+    if (exists("workspace/SOUL.md")) markers.push("workspace/SOUL.md");
+    if (exists("memory")) markers.push("memory/");
+    if (exists("agents")) markers.push("agents/");
+    return { name: "openclaw", confidence: "high", markers };
+  }
+
+  // Claude Code: CLAUDE.md or .claude/
+  if (exists("CLAUDE.md") || exists(".claude")) {
+    const markers = [];
+    if (exists("CLAUDE.md")) markers.push("CLAUDE.md");
+    if (exists(".claude")) markers.push(".claude/");
+    if (exists(".claude/settings.json")) markers.push(".claude/settings.json");
+    if (exists(".mcp.json")) markers.push(".mcp.json");
+    return { name: "claude-code", confidence: "high", markers };
+  }
+
+  // Cursor: .cursor/rules/
+  if (exists(".cursor") || exists(".cursorrules")) {
+    const markers = [];
+    if (exists(".cursor")) markers.push(".cursor/");
+    if (exists(".cursorrules")) markers.push(".cursorrules");
+    if (exists(".cursor/rules")) markers.push(".cursor/rules/");
+    return { name: "cursor", confidence: "high", markers };
+  }
+
+  // Copilot: .github/copilot-instructions.md
+  if (exists(".github/copilot-instructions.md")) {
+    const markers = [".github/copilot-instructions.md"];
+    if (exists(".github/agents")) markers.push(".github/agents/");
+    return { name: "copilot", confidence: "high", markers };
+  }
+
+  // Windsurf: .windsurf/ or .windsurfrules
+  if (exists(".windsurf") || exists(".windsurfrules")) {
+    const markers = [];
+    if (exists(".windsurf")) markers.push(".windsurf/");
+    if (exists(".windsurfrules")) markers.push(".windsurfrules");
+    return { name: "windsurf", confidence: "high", markers };
+  }
+
+  // CrewAI: pyproject.toml with crewai in it, or config/agents.yaml
+  if (exists("pyproject.toml")) {
+    try {
+      const toml = fs.readFileSync(path.join(dirPath, "pyproject.toml"), "utf-8");
+      if (toml.includes("crewai")) {
+        const markers = ["pyproject.toml (crewai)"];
+        if (exists("src")) markers.push("src/");
+        return { name: "crewai", confidence: "high", markers };
+      }
+    } catch {}
+  }
+
+  // APM: apm.yml or .apm/
+  if (exists("apm.yml") || exists(".apm")) {
+    const markers = [];
+    if (exists("apm.yml")) markers.push("apm.yml");
+    if (exists(".apm")) markers.push(".apm/");
+    return { name: "apm", confidence: "high", markers };
+  }
+
+  // agentpkg itself
+  if (exists("manifest.json")) {
+    try {
+      const manifest = JSON.parse(fs.readFileSync(path.join(dirPath, "manifest.json"), "utf-8"));
+      if (manifest.format === "agentpkg") {
+        return { name: "agentpkg", confidence: "high", markers: ["manifest.json (agentpkg)"] };
+      }
+    } catch {}
+  }
+
+  return null;
+}
+
+function importClaudeCode(dirPath: string): AgentPackage {
+  const pkg = new AgentPackage({ name: path.basename(dirPath), description: "Imported from Claude Code" });
+
+  const claudeMd = path.join(dirPath, "CLAUDE.md");
+  if (fs.existsSync(claudeMd)) {
+    pkg.setSoul(fs.readFileSync(claudeMd, "utf-8"));
+  }
+
+  // Import rules as guardrails
+  const rulesDir = path.join(dirPath, ".claude", "rules");
+  if (fs.existsSync(rulesDir)) {
+    const rules: string[] = [];
+    for (const f of fs.readdirSync(rulesDir).filter(f => f.endsWith(".md"))) {
+      rules.push(fs.readFileSync(path.join(rulesDir, f), "utf-8").trim());
+    }
+    if (rules.length) pkg.guardrails = { rules, refusals: [], safetyNotes: [] };
+  }
+
+  // Import skills
+  const skillsDir = path.join(dirPath, ".claude", "skills");
+  if (fs.existsSync(skillsDir)) {
+    for (const skillName of fs.readdirSync(skillsDir).filter(f => fs.statSync(path.join(skillsDir, f)).isDirectory())) {
+      const skillMd = path.join(skillsDir, skillName, "SKILL.md");
+      const instructions = fs.existsSync(skillMd) ? fs.readFileSync(skillMd, "utf-8") : "";
+      pkg.addSkill({ name: skillName, description: skillName, instructions });
+    }
+  }
+
+  // Import MCP integrations
+  const mcpPath = path.join(dirPath, ".mcp.json");
+  if (fs.existsSync(mcpPath)) {
+    try {
+      const mcp = JSON.parse(fs.readFileSync(mcpPath, "utf-8"));
+      for (const [name, server] of Object.entries(mcp.mcpServers || {})) {
+        const s = server as Record<string, unknown>;
+        pkg.addIntegration({ name, type: "mcp", url: (s.url as string) || "", config: s });
+      }
+    } catch {}
+  }
+
+  pkg.setPlatformRaw("claude-code", { importedFrom: dirPath });
+  return pkg;
+}
+
+function importCursor(dirPath: string): AgentPackage {
+  const pkg = new AgentPackage({ name: path.basename(dirPath), description: "Imported from Cursor" });
+
+  // .cursorrules (legacy single file)
+  const legacyRules = path.join(dirPath, ".cursorrules");
+  if (fs.existsSync(legacyRules)) {
+    pkg.setSoul(fs.readFileSync(legacyRules, "utf-8"));
+  }
+
+  // .cursor/rules/*.mdc
+  const rulesDir = path.join(dirPath, ".cursor", "rules");
+  if (fs.existsSync(rulesDir)) {
+    const rules: string[] = [];
+    for (const f of fs.readdirSync(rulesDir).filter(f => f.endsWith(".mdc") || f.endsWith(".md"))) {
+      const content = fs.readFileSync(path.join(rulesDir, f), "utf-8").trim();
+      if (f.includes("project") && !pkg.systemPrompt) {
+        pkg.setSoul(content);
+      } else {
+        rules.push(content);
+      }
+    }
+    if (rules.length) pkg.guardrails = { rules, refusals: [], safetyNotes: [] };
+  }
+
+  pkg.setPlatformRaw("cursor", { importedFrom: dirPath });
+  return pkg;
+}
+
+function importCopilot(dirPath: string): AgentPackage {
+  const pkg = new AgentPackage({ name: path.basename(dirPath), description: "Imported from GitHub Copilot" });
+
+  const instructionsPath = path.join(dirPath, ".github", "copilot-instructions.md");
+  if (fs.existsSync(instructionsPath)) {
+    pkg.setSoul(fs.readFileSync(instructionsPath, "utf-8"));
+  }
+
+  // Agents
+  const agentsDir = path.join(dirPath, ".github", "agents");
+  if (fs.existsSync(agentsDir)) {
+    for (const f of fs.readdirSync(agentsDir).filter(f => f.endsWith(".md"))) {
+      const name = path.basename(f, ".md");
+      const sub = new AgentPackage({ name, description: `Copilot agent: ${name}` });
+      sub.setSoul(fs.readFileSync(path.join(agentsDir, f), "utf-8"));
+      pkg.addSubagent(sub);
+    }
+  }
+
+  // Skills
+  const skillsDir = path.join(dirPath, ".github", "skills");
+  if (fs.existsSync(skillsDir)) {
+    for (const skillName of fs.readdirSync(skillsDir).filter(f => fs.statSync(path.join(skillsDir, f)).isDirectory())) {
+      const skillMd = path.join(skillsDir, skillName, "SKILL.md");
+      const instructions = fs.existsSync(skillMd) ? fs.readFileSync(skillMd, "utf-8") : "";
+      pkg.addSkill({ name: skillName, description: skillName, instructions });
+    }
+  }
+
+  pkg.setPlatformRaw("copilot", { importedFrom: dirPath });
+  return pkg;
+}
+
+function importWindsurf(dirPath: string): AgentPackage {
+  const pkg = new AgentPackage({ name: path.basename(dirPath), description: "Imported from Windsurf" });
+
+  const windsurfrules = path.join(dirPath, ".windsurfrules");
+  if (fs.existsSync(windsurfrules)) {
+    pkg.setSoul(fs.readFileSync(windsurfrules, "utf-8"));
+  }
+
+  const rulesDir = path.join(dirPath, ".windsurf", "rules");
+  if (fs.existsSync(rulesDir)) {
+    const rules: string[] = [];
+    for (const f of fs.readdirSync(rulesDir).filter(f => f.endsWith(".md"))) {
+      const content = fs.readFileSync(path.join(rulesDir, f), "utf-8").trim();
+      if (f.includes("project") && !pkg.systemPrompt) {
+        pkg.setSoul(content);
+      } else {
+        rules.push(content);
+      }
+    }
+    if (rules.length) pkg.guardrails = { rules, refusals: [], safetyNotes: [] };
+  }
+
+  pkg.setPlatformRaw("windsurf", { importedFrom: dirPath });
+  return pkg;
+}
+
+function importGenericDir(dirPath: string, platform: string): AgentPackage {
+  const pkg = new AgentPackage({ name: path.basename(dirPath), description: `Imported from ${platform}` });
+
+  // Try to find a system prompt in common locations
+  for (const candidate of ["SYSTEM.md", "system-prompt.md", "prompt.md", "README.md", "SOUL.md", "IDENTITY.md"]) {
+    const p = path.join(dirPath, candidate);
+    if (fs.existsSync(p)) {
+      pkg.setSoul(fs.readFileSync(p, "utf-8"));
+      break;
+    }
+  }
+
+  // Try to find a config JSON
+  for (const candidate of ["config.json", "agent.json", "manifest.json"]) {
+    const p = path.join(dirPath, candidate);
+    if (fs.existsSync(p)) {
+      try {
+        const raw = JSON.parse(fs.readFileSync(p, "utf-8"));
+        return convertFromJSON(raw, platform);
+      } catch {}
+    }
+  }
+
+  pkg.setPlatformRaw(platform, { importedFrom: dirPath });
+  return pkg;
+}
+
+async function cmdImport(args: string[]) {
+  const dirPath = args[0];
+  if (!dirPath) {
+    error("Usage: agentpkg import <directory> [--platform <name>] [--include-secrets] [--passphrase <p>] [-o <output>]");
+    log();
+    log(`  ${c.bold}Examples:${c.reset}`);
+    log(`    agentpkg import ~/.config/openclaw`);
+    log(`    agentpkg import ./my-project                    ${c.dim}(auto-detects platform)${c.reset}`);
+    log(`    agentpkg import ./my-project --platform cursor`);
+    log(`    agentpkg import ~/.config/openclaw --include-secrets --passphrase "key"`);
+    log();
+    log(`  ${c.bold}Supported platforms:${c.reset}`);
+    log(`    openclaw, claude-code, cursor, copilot, windsurf, crewai, apm`);
+    log();
+    process.exit(1);
+  }
+
+  if (!fs.existsSync(dirPath)) { error(`Directory not found: ${dirPath}`); process.exit(1); }
+  if (!fs.statSync(dirPath).isDirectory()) { error(`Not a directory: ${dirPath}`); process.exit(1); }
+
+  const forcePlatform = getFlag(args, "--platform");
+  const includeSecrets = hasFlag(args, "--include-secrets");
+  const passphrase = getFlag(args, "--passphrase");
+  const output = getFlag(args, "-o");
+
+  heading("Importing agent");
+
+  // Detect or use forced platform
+  let platform: string;
+  if (forcePlatform) {
+    platform = forcePlatform;
+    info(`Platform: ${platform} (manual)`);
+  } else {
+    const detected = detectPlatform(dirPath);
+    if (detected) {
+      platform = detected.name;
+      info(`Detected: ${c.bold}${platform}${c.reset} (${detected.confidence} confidence)`);
+      info(`Markers: ${detected.markers.join(", ")}`);
+    } else {
+      warn("Could not auto-detect platform. Using generic importer.");
+      platform = "unknown";
+    }
+  }
+  log();
+
+  let pkg: AgentPackage;
+
+  switch (platform) {
+    case "openclaw": {
+      const { convertOpenClaw } = await import("../src/adapters/openclaw");
+      pkg = convertOpenClaw(dirPath, {
+        includeSecrets,
+        extractSqliteMemories: true,
+      });
+      break;
+    }
+    case "claude-code":
+      pkg = importClaudeCode(dirPath);
+      break;
+    case "cursor":
+      pkg = importCursor(dirPath);
+      break;
+    case "copilot":
+      pkg = importCopilot(dirPath);
+      break;
+    case "windsurf":
+      pkg = importWindsurf(dirPath);
+      break;
+    case "agentpkg":
+      info("This is already an agentpkg directory. Use 'agentpkg pack' instead.");
+      process.exit(0);
+      break;
+    default:
+      pkg = importGenericDir(dirPath, platform);
+      break;
+  }
+
+  // Show what was imported
+  const manifest = pkg.buildManifest();
+  const contents = manifest.contents;
+  log(`  ${c.bold}Imported: ${manifest.agent.display_name}${c.reset}`);
+  if (contents.soul) log(`  Soul: ${c.green}✓${c.reset}`);
+  if (contents.memories.count) log(`  Memories: ${c.green}${contents.memories.count}${c.reset}`);
+  if (contents.skills.count) log(`  Skills: ${c.green}${contents.skills.count}${c.reset}`);
+  if (contents.tools.count) log(`  Tools: ${c.green}${contents.tools.count}${c.reset}`);
+  if (contents.crons.count) log(`  Crons: ${c.green}${contents.crons.count}${c.reset}`);
+  if (contents.subagents.count) log(`  Subagents: ${c.green}${contents.subagents.count}${c.reset}`);
+  if (contents.integrations.count) log(`  Integrations: ${c.green}${contents.integrations.count}${c.reset}`);
+  if (pkg.secrets.length) log(`  Secrets: ${c.yellow}${pkg.secrets.length} (will be encrypted)${c.reset}`);
+  log();
+
+  // Pack
+  const result = await pkg.pack(output, passphrase);
+  success(`Packed: ${c.bold}${result.path}`);
+  info(`Size: ${(result.size / 1024).toFixed(1)} KB`);
+  info(`SHA256: ${c.dim}${result.checksum}${c.reset}`);
+  if (passphrase && pkg.secrets.length) {
+    success(`${pkg.secrets.length} secret(s) encrypted in vault`);
+  }
+  log();
+  info("Next steps:");
+  log(`  ${c.cyan}agentpkg inspect ${result.path}${c.reset}`);
+  log(`  ${c.cyan}agentpkg compile ${result.path} --target all -o ./output${c.reset}`);
+  log();
+}
+
 async function cmdConvert(args: string[]) {
   const jsonPath = args[0];
   if (!jsonPath) { error("Usage: agentpkg convert <export.json> [--platform <n>] [--include-secrets --passphrase <p>]"); process.exit(1); }
@@ -725,6 +1077,10 @@ function showHelp() {
   log(`  ${c.cyan}add${c.reset}       <type> <dir>          Add memory, skill, tool, secret, cron, or rule`);
   log(`  ${c.cyan}set${c.reset}       <field> <dir>         Update soul, model, or description`);
   log();
+  log(`${c.bold}IMPORT${c.reset}`);
+  log(`  ${c.cyan}import${c.reset}    <dir>                 Import from any platform (auto-detects)`);
+  log(`  ${c.cyan}convert${c.reset}   <json>                Convert a JSON export to agentpkg`);
+  log();
   log(`${c.bold}BUILD & DEPLOY${c.reset}`);
   log(`  ${c.cyan}init${c.reset}      <name>                Scaffold an empty agent package`);
   log(`  ${c.cyan}pack${c.reset}      <dir>                 Zip an .agentpkg directory`);
@@ -735,7 +1091,6 @@ function showHelp() {
   log(`  ${c.cyan}inspect${c.reset}   <path>                Show contents + secrets summary`);
   log(`  ${c.cyan}audit${c.reset}     <path>                Security scan`);
   log(`  ${c.cyan}unpack${c.reset}    <zip>                 Extract a package`);
-  log(`  ${c.cyan}convert${c.reset}   <json>                Convert any JSON to agentpkg`);
   log();
   log(`${c.bold}COMPILE TARGETS${c.reset}  (--target <fmt>)`);
   log(`  claude-code | cursor | copilot | windsurf | crewai | openai | apm | all`);
@@ -766,7 +1121,7 @@ function showHelp() {
 // ── Main ──
 
 const commands: Record<string, (args: string[]) => Promise<void>> = {
-  create: cmdCreate, add: cmdAdd, set: cmdSet,
+  create: cmdCreate, add: cmdAdd, set: cmdSet, import: cmdImport,
   init: cmdInit, pack: cmdPack, validate: cmdValidate, inspect: cmdInspect,
   unpack: cmdUnpack, convert: cmdConvert, audit: cmdAudit, compile: cmdCompile,
 };
